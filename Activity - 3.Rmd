@@ -1,0 +1,219 @@
+---
+title: "Activity 03"
+author: "Hathik Ihthizam, Manula Fernando, Chathuranga Manchanayaka - 012, 004, 019"
+date: "2024-06-12"
+output: 
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+## Data Exploration and Visualization
+
+```{r}
+library(tidyverse)
+library(TTR)
+library(Metrics)
+library(ggplot2)
+library(tseries)
+library(dplyr)
+library(forecast)
+library(zoo)
+library(lubridate)
+library(cat)
+library(lmtest)
+```
+
+```{r}
+data <-  read.csv("C:/Users/Manula Fernando/Documents/NIBM HNDDS/Time Series/Tomato.csv")
+data$Date <- as.Date(data$Date, format = "%d/%m/%Y")
+head(data)
+```
+
+```{r}
+# Enhanced plot for Daily Tomato Prices
+ggplot(data, aes(x = Date, y = Price.INR.)) +
+
+  # Tomato Price Line
+  geom_line(color = "tomato", linewidth = 1) +  # Richer tomato color and slightly thicker line
+  geom_point(color = "tomato3", size = 1.5) + # Add points for each price
+
+  # Labels and Title
+  labs(title = "Tomato Price Fluctuations Over Time",
+       subtitle = "Daily Prices from January to May 2021", # Added subtitle
+       x = "Date",
+       y = "Price (INR per Kg)") + # Clearer y-axis label
+
+  # Theme and Customization 
+  theme_light() + # Light theme for a clean look 
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"), # Centered, bold title
+    plot.subtitle = element_text(hjust = 0.5, size = 12),
+    axis.text = element_text(size = 10), # Adjust axis text size
+    axis.title = element_text(size = 12), # Adjust axis title size
+    panel.grid.major = element_line(color = "gray90"), # Softer grid lines
+    panel.grid.minor = element_blank()  # Remove minor grid lines
+  ) 
+```
+A visual examination of the price trends showed fluctuations over time, hinting at possible seasonal patterns but no strong overall upward or downward trend.
+
+## Preprocessing
+
+Create lagged variables, moving averages, and month/day features
+```{r}
+tomato_data <- data %>%
+  mutate(
+    Lag1 = lag(Price.INR., n = 1),
+    Lag2 = lag(Price.INR., n = 2),
+    Lag3 = lag(Price.INR., n = 3),
+    Lag4 = lag(Price.INR., n = 4),
+    MA5 = rollmean(Price.INR., k = 5, align = "right", fill = NA),
+    MA10 = rollmean(Price.INR., k = 10, align = "right", fill = NA),
+    Month = factor(month(Date), levels = 1:12, labels = month.name),
+    DayOfWeek = factor(wday(Date, label = TRUE))
+  )
+```
+
+Split the data into training and testing sets
+```{r}
+# Adjust the cutoff date to include some May data in the training set
+train_data <- tomato_data %>% filter(Date < as.Date("2021-05-08"))  # Example: Include first week of May
+test_data <- tomato_data %>% filter(Date >= as.Date("2021-05-08"))
+
+```
+
+Ensure consistent factor levels 
+(Important for prediction on a new dataset with potentially different factor levels)
+```{r}
+test_data$Month <- factor(test_data$Month, levels = levels(train_data$Month))
+test_data$DayOfWeek <- factor(test_data$DayOfWeek, levels = levels(train_data$DayOfWeek))
+```
+
+To predict future prices, we enriched the data with additional information. We included past prices (lagged variables), smoothed price trends (moving averages), and categorical variables for the month and day of the week to capture any potential seasonal effects. The data was then split, using the first week of May as a cutoff, into a training set (used to build the model) and a test set (used to evaluate the model's performance on unseen data).
+
+
+```{r}
+train_data
+```
+```{r}
+test_data
+```
+
+## Model Building
+
+Fit the regression model
+```{r}
+model <- lm(
+  Price.INR. ~ Lag1 + Lag2 + Lag3 + Lag4 + MA5 + MA10 + Month + DayOfWeek, 
+  data = train_data
+)
+
+summary(model)
+```
+
+##Diagnostics and Evaluation
+
+Check for autocorrelation in residuals using ACF and Durbin-Watson tests.
+```{r}
+ggAcf(residuals(model)) +
+
+  # Theme and Customization 
+  theme_bw() + # Classic black and white theme
+  labs(title = "Autocorrelation Function (ACF) of Residuals",
+       x = "Lag", 
+       y = "ACF") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 12),
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank()
+  )
+```
+```{r}
+print(dwtest(model))
+```
+
+The Durbin-Watson (DW) test is used to detect the presence of autocorrelation at lag 1 in the residuals from a regression analysis. Here's a brief interpretation of the test results you provided:
+
+Durbin-Watson Test Results
+DW Statistic (DW): 1.1786
+p-value: 0.0001368
+Alternative Hypothesis: true autocorrelation is greater than 0
+Interpretation
+DW Statistic:
+
+The DW statistic ranges from 0 to 4.
+A DW value around 2 suggests no autocorrelation.
+A DW value significantly less than 2 suggests positive autocorrelation.
+A DW value significantly greater than 2 suggests negative autocorrelation.
+A DW value of 1.1786 indicates some degree of positive autocorrelation in the residuals, but it is not definitive on its own.
+
+p-value:
+
+The p-value is 0.0001368, which is less than the common significance level of 0.05.
+This low p-value suggests that we can reject the null hypothesis of no autocorrelation in favor of the alternative hypothesis that there is positive autocorrelation.
+Conclusion
+Based on the DW statistic of 1.1786 and a p-value of 0.0001368, we conclude that there is significant positive autocorrelation in the residuals of the regression model. This means that the residuals are not independent, and this violation of the independence assumption can affect the validity of statistical tests and the efficiency of the model estimators.
+
+We investigated whether the model was adequately capturing the time-dependent nature of the data. Examining the autocorrelation of the model's residuals (the differences between predicted and actual prices), we found significant positive autocorrelation. This means that the model's errors were not completely random, suggesting that the model is missing some important temporal patterns in the data. This was confirmed by the Durbin-Watson test, which indicated significant autocorrelation.
+
+Predict using the fitted model
+```{r}
+predictions <- predict(model, newdata =  test_data)
+```
+Add predictions to the test_data
+```{r}
+test_data$Predictions <- predictions
+```
+
+Evaluate model performance
+```{r}
+rmse <- rmse(test_data$Price.INR., test_data$Predictions)
+mae <- mae(test_data$Price.INR., test_data$Predictions)
+```
+
+
+Visualize the predictions.
+```{r}
+ggplot(test_data, aes(x = Date)) +
+
+  # Actual Prices
+  geom_line(aes(y = Price.INR., color = "Actual"), linewidth = 1) + 
+  geom_point(aes(y = Price.INR., color = "Actual"), size = 2) +
+
+  # Predicted Prices
+  geom_line(aes(y = Predictions, color = "Predicted"), linewidth = 1, linetype = "dashed") +
+  geom_point(aes(y = Predictions, color = "Predicted"), size = 2, shape = 17) +
+
+  # Labels and Title
+  labs(title = "Tomato Price Prediction Performance", 
+       subtitle = "May 2021: Actual vs. Predicted Prices", 
+       x = "Date",
+       y = "Price (INR per Kg)") +
+
+  # Theme and Colors
+  theme_bw() +
+  scale_color_manual(values = c("Actual" = "darkgreen", "Predicted" = "red3")) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, size = 12),
+    axis.title = element_text(size = 12), 
+    legend.title = element_blank(), 
+    legend.position = "bottom", 
+    legend.text = element_text(size = 10)
+  ) 
+```
+
+```{r}
+cat("RMSE:", rmse, "\nMAE:", mae)
+```
+## Reporting
+
+To assess how well the model performs on new data, we used it to predict tomato prices for the test set (data from the second week of May onward). The model's performance was measured using RMSE (Root Mean Squared Error) and MAE (Mean Absolute Error). The RMSE was extremely low, 1.079542e-13, and the MAE was similarly low at 1.018445e-13. While these low values suggest a seemingly perfect fit, the presence of autocorrelation in the residuals indicates that the model might be overfitting the training data.
+
+### Overall Assessment and Recommendations: 
+
+While the model appears to achieve very high accuracy on the test set, the significant autocorrelation in the residuals is a warning sign. It implies that the model might be too closely tailored to the training data and might not generalize well to entirely new data. To address this, we should consider:
+> Using Time Series Models: Explore models like ARIMA, which are specifically designed to handle autocorrelation and capture time dependencies.
+> Adding More Relevant Factors: Incorporate external factors that could affect tomato prices, such as weather data or market demand indicators.
+> Model Comparison: Compare the performance of different models to see which one provides the most robust and reliable predictions.

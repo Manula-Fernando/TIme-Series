@@ -1,0 +1,200 @@
+---
+title: "Activity 04"
+author: "Manula Fernando- 004"
+date: "2024-06-24"
+output: 
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+**1. Data Loading and Preparation:**
+```{r}
+library(ggplot2)
+library(ggfortify)
+library(lattice)
+library(tidyverse)
+library(caret)
+library(dplyr)
+library(lubridate)
+library(lmtest) 
+```
+
+
+```{r}
+df <- read.csv("AirQuality.csv")
+head(df)
+```
+```{r}
+str(df)
+```
+```{r}
+df<- na.omit(df)
+```
+
+```{r}
+df$DateTime <- as.POSIXct(df$DateTime / 1000, origin = "1970-01-01")
+```
+
+```{r}
+# Feature Engineering (Example: Hour of the day)
+df$Hour <- hour(df$DateTime)
+```
+
+```{r}
+head(df)
+```
+ This section loads the necessary libraries and the dataset. It handles missing values, converts the 'DateTime' column to a proper date/time format, and extracts the 'Hour' of the day as a potential predictor variable.
+
+
+
+**2. Data Splitting:**
+```{r}
+# Split into X (predictors) and Y (target)
+X <- df %>% select(-"Temperature...C.") 
+y <- df$"Temperature...C." 
+
+# Split into training and testing sets
+set.seed(123) 
+train_index <- createDataPartition(y, p = 0.8, list = FALSE)
+X_train <- X[train_index, ]
+y_train <- y[train_index]
+X_test <- X[-train_index, ]
+y_test <- y[-train_index]
+```
+Here, I separate the data into predictor variables (X) and the target variable, temperature ("Temperature...C."). The data is then split into training and testing sets (80% for training, 20% for testing).
+
+
+**3. Model Building and Summary:**
+```{r}
+# Combine training data for lm()
+train_data <- cbind(X_train, "Temperature...C." = y_train)
+```
+
+```{r}
+# Train the linear regression model
+lm_model <- lm(`Temperature...C.` ~ ., data = train_data)
+```
+I combined the training data and build a multiple linear regression model (`lm()`) to predict temperature using all other variables. The `summary()` function will provide the details about the model.
+
+
+```{r}
+summary(lm_model)
+```
+
+ **Model Summary Output:**
+     - **Residuals:**  Give you a sense of the error distribution. The median should ideally be close to zero.
+     - **Coefficients:** Show the estimated effect of each predictor on temperature.
+       - `Estimate`: The size of the effect.
+       - `Std. Error`: The uncertainty of the estimate.
+       - `t value`: A test statistic to see if the effect is significant.
+       - `Pr(>|t|)`:  The p-value. A small p-value (typically < 0.05) indicates a statistically significant effect.
+     - **R-squared (0.9598):**  Indicates that approximately 96% of the variation in temperature is explained by the model (a very good fit).
+     - **F-statistic (p-value < 2.2e-16):** Tests the overall significance of the model, and the very low p-value shows that the model is highly significant.
+
+
+**4. Predictions and Accuracy:**
+```{r}
+# Predictions on test set
+predictions <- predict(lm_model, newdata = X_test)
+```
+
+```{r}
+# Model Evaluation
+rmse <- RMSE(predictions, y_test)
+mae <- MAE(predictions, y_test)
+r_squared <- R2(predictions, y_test)
+
+cat("RMSE:", rmse, "\n")
+cat("MAE:", mae, "\n")
+cat("R-squared:", r_squared, "\n")
+```
+I used the trained model to predict temperature on the test set. You calculate evaluation metrics to measure how well the model predicts on new data:
+     - **RMSE (0.995):**  The average prediction error in the same units as your target variable (degrees Celsius).
+     - **MAE (0.711):**  The average absolute prediction error.
+     - **R-squared (0.9567):** Similar to the R-squared from the model summary, but now calculated on the test set. A high R-squared on the test set indicates good predictive ability.
+  
+     
+**5. Residual Analysis:**  
+```{r}
+# Residual Diagnostics
+residuals <- residuals(lm_model)
+```
+
+```{r}
+# 1. Residual Plots (using ggfortify)
+autoplot(lm_model, which = 1:4, ncol = 2) 
+```
+
+
+```{r}
+# 2. Residuals vs. Fitted Values (ggplot2)
+ggplot(data = data.frame(Fitted = lm_model$fitted.values, Residuals = residuals(lm_model)),
+       aes(x = Fitted, y = Residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Residuals vs. Fitted Values", x = "Fitted Values", y = "Residuals")
+```
+```{r}
+# 4. Histogram of Residuals (ggplot2)
+ggplot(data = data.frame(Residuals = residuals(lm_model)), aes(x = Residuals)) +
+  geom_histogram(fill = "lightblue", color = "black") +
+  labs(title = "Histogram of Residuals", x = "Residuals", y = "Frequency")
+```
+
+
+```{r}
+# Shapiro-Wilk test for normality
+shapiro.test(residuals)
+```
+```{r}
+# Fit lm() to the ORIGINAL training data
+lm_model_for_tests <- lm(Temperature_C ~ ., data = cbind(X_train, Temperature_C = y_train)) 
+```
+
+```{r}
+# Durbin-Watson test for autocorrelation 
+dwtest(lm_model_for_tests) 
+```
+
+```{r}
+# Breusch-Pagan test for heteroscedasticity
+bptest(lm_model_for_tests) 
+```
+```{r}
+# Example Plot: Predicted vs. Actual
+plot_data <- data.frame(Actual = y_test, Predicted = predictions)
+ggplot(plot_data, aes(x = Actual, y = Predicted)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, color = "red") + 
+  labs(title = "Predicted vs. Actual Temperature",
+       x = "Actual Temperature (.C)",
+       y = "Predicted Temperature (.C)")
+```
+ This part analyzes the residuals (the differences between actual and predicted temperatures) to assess the model's assumptions. 
+     - **Plots:**  Visual inspections using `autoplot()`, Residuals vs. Fitted, and Histogram of Residuals to check for normality, constant variance, and patterns.
+     - **Shapiro-Wilk Test (p-value < 2.2e-16):** Tests the normality assumption of the residuals. The very low p-value indicates that the residuals are not normally distributed.
+     - **Durbin-Watson Test (p-value = 0.7609):**  Tests for autocorrelation in the residuals. The high p-value suggests there's no significant autocorrelation.
+     - **Breusch-Pagan Test (p-value = 1.554e-07):**  Tests for heteroscedasticity. The very low p-value indicates the presence of heteroscedasticity (non-constant variance).
+
+**Overall Interpretation:**
+
+I've built a multiple linear regression model that explains a high percentage of the variation in temperature (96% based on R-squared).  However, the residual diagnostics suggest issues with the normality assumption and heteroscedasticity. These issues indicate that the model's assumptions are violated, which might affect the reliability of p-values and confidence intervals for your coefficients.
+
+**Possible Next Steps I can Follow to improve the Model:**
+
+- **Address Heteroscedasticity:**
+  - **Transformations:**  Trying transforming the response variable (temperature) or predictor variables.
+  - **Weighted Least Squares:** Considering this if I can identify a pattern in the heteroscedasticity.
+- **Consider Other Models:**
+   - Linear regression might not be the best choice. Exploring other regression models like polynomial regression, random forests, or support vector machines, which might be more robust to violations of assumptions. 
+- **Feature Engineering:**
+   - Experimenting with creating new features or transforming existing ones to improve model accuracy and potentially address assumption violations.
+
+
+
+
+
+
+
+

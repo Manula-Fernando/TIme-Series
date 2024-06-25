@@ -1,0 +1,57 @@
+---
+title: "Simple Linear Regression"
+author: "Manula Fernando"
+date: "2024-06-12"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+```
+
+Step 2: Create Example Time Series Data
+```{r}
+set.seed(123)
+
+time<-1:100
+value<-2*time+ rnorm(100, mean=0,sd=20)
+
+df<-data.frame(time,value)
+df
+```
+
+Step 3: Visualize the Data
+```{r}
+# Create a scatterplot to visualize the time series data
+ggplot(df, aes(x = time, y = value)) +
+  geom_point() +
+  labs(title = "Example Time Series Data",
+       x = "Time",
+       y = "Value")
+```
+
+Step 4: Fit a Simple Linear Regression Model
+```{r}
+model<-lm(value ~ time,data=df)
+summary(model)
+```
+Step 5: Add Regression Line to Plot
+```{r}
+# Add the regression line to the scatterplot
+ggplot(df, aes(x = time, y = value)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "red") + # Add the regression line
+  labs(title = "Simple Linear Regression: Time Series Data",
+       x = "Time",
+       y = "Value")
+```
+
+Step 6: Make Predictions
+```{r}
+# Create a new data frame with time values for predictions
+new_df <- data.frame(time = c(105, 110, 115))
+
+# Make predictions for the new time values
+predict(model, newdata = new_df) 
+```
+

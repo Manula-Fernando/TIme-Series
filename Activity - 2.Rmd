@@ -1,0 +1,223 @@
+---
+title: "Activity 2 - MA"
+author: "Hathik Ihthizam, Manula Fernando, Chathuranga Manchanayaka - 012, 004, 019"
+date: "2024-06-05"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r}
+tinytex::tinytex_root()
+```
+
+```{r}
+library(tidyverse)
+library(TTR)
+library(Metrics)
+library(ggplot2)
+library(zoo)
+library(conflicted)
+```
+
+#Load and Inspect the Dataset:
+```{r}
+data<- read.csv("C:/Users/Manula Fernando/Documents/NIBM HNDDS/Time Series/Tomato.csv")
+data$Date <- as.Date(data$Date, format = "%d/%m/%Y")
+data
+```
+# Create a time series plot of tomato prices 
+```{r}
+ggplot(data, aes(x = Date, y = Price.INR.)) +
+  geom_line(color = "tomato", linewidth = 1) +
+  labs(title = "Daily Tomato Prices (Jan-May 2021)",
+       x = "Date",
+       y = "Price (INR)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) 
+```
+
+#Calculate Moving Averages:
+```{r}
+data$SMA_7 <- SMA(data$Price.INR., n = 7)
+data$SMA_14 <- SMA(data$Price.INR., n = 14)
+data$SMA_30 <- SMA(data$Price.INR., n = 30)
+head(data, n=35)
+```
+
+#Develop Predictive Models and Evaluate Performance:
+```{r}
+evaluate_performance <- function(actual, predicted) {
+  mse <- mse(actual, predicted)
+  mae <- mae(actual, predicted)
+  rmse <- rmse(actual, predicted)
+  return(c(MSE = mse, MAE = mae, RMSE = rmse))
+}
+```
+
+# --- 7-day SMA Model ---
+```{r}
+actual_7 <- data$Price.INR.[8:nrow(data)]
+predicted_SMA_7 <- data$SMA_7[8:nrow(data)]
+performance_SMA_7 <- evaluate_performance(actual_7, predicted_SMA_7)
+```
+
+# --- 14-day SMA Model ---
+```{r}
+actual_14 <- data$Price.INR.[15:nrow(data)]
+predicted_SMA_14 <- data$SMA_14[15:nrow(data)]
+performance_SMA_14 <- evaluate_performance(actual_14, predicted_SMA_14)
+```
+# --- 30-day SMA Model ---
+```{r}
+actual_30 <- data$Price.INR.[31:nrow(data)]
+predicted_SMA_30 <- data$SMA_30[31:nrow(data)]
+performance_SMA_30 <- evaluate_performance(actual_30, predicted_SMA_30)
+```
+# Print the performance metrics for each model
+```{r}
+print("Performance of 7-day SMA:")
+print(performance_SMA_7)
+
+print("Performance of 14-day SMA:")
+print(performance_SMA_14)
+
+print("Performance of 30-day SMA:")
+print(performance_SMA_30)
+```
+# Visualize Actual vs. Predicted Prices with SMAs
+```{r}
+ggplot(data, aes(x = Date)) +
+  geom_line(aes(y = Price.INR., color = "Actual"), linewidth = 1) +
+  geom_line(aes(y = SMA_7, color = "7-day SMA"), linewidth = 1) +
+  geom_line(aes(y = SMA_14, color = "14-day SMA"), linewidth = 1) +
+  geom_line(aes(y = SMA_30, color = "30-day SMA"), linewidth = 1) +
+  labs(title = "Actual Tomato Prices vs. Moving Averages",
+       x = "Date",
+       y = "Price (INR)") +
+  scale_color_manual(values = c("Actual" = "black", "7-day SMA" = "blue", "14-day SMA" = "red", "30-day SMA" = "green")) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5), 
+        legend.position = "bottom", # Place legend at the bottom
+        legend.title = element_blank()) # Remove legend title
+```
+ 
+
+# Calculate the rolling standard deviations for confidence intervals
+```{r}
+data$rolling_sd_7 <- rollapply(data$Price.INR., width = 7, FUN = sd, fill = NA, align = 'right')
+data$rolling_sd_14 <- rollapply(data$Price.INR., width = 14, FUN = sd, fill = NA, align = 'right')
+data$rolling_sd_30 <- rollapply(data$Price.INR., width = 30, FUN = sd, fill = NA, align = 'right')
+
+```
+
+# Calculate the upper and lower bounds for the confidence intervals
+```{r}
+data$SMA_7_upper <- data$SMA_7 + 1.96 * data$rolling_sd_7
+data$SMA_7_lower <- data$SMA_7 - 1.96 * data$rolling_sd_7
+data$SMA_14_upper <- data$SMA_14 + 1.96 * data$rolling_sd_14
+data$SMA_14_lower <- data$SMA_14 - 1.96 * data$rolling_sd_14
+data$SMA_30_upper <- data$SMA_30 + 1.96 * data$rolling_sd_30
+data$SMA_30_lower <- data$SMA_30 - 1.96 * data$rolling_sd_30
+```
+
+# Plot the actual data and moving averages with confidence intervals
+```{r}
+p <- ggplot(data[complete.cases(data), ], aes(x = Date)) + 
+  geom_line(aes(y = Price.INR., color = "Actual")) +
+  geom_line(aes(y = SMA_7, color = "7-day SMA")) + 
+  geom_line(aes(y = SMA_14, color = "14-day SMA")) +
+  geom_line(aes(y = SMA_30, color = "30-day SMA")) +
+  geom_ribbon(aes(ymin = SMA_7_lower, ymax = SMA_7_upper), alpha = 0.2, fill = "blue") +
+  geom_ribbon(aes(ymin = SMA_14_lower, ymax = SMA_14_upper), alpha = 0.2, fill = "red") +
+  geom_ribbon(aes(ymin = SMA_30_lower, ymax = SMA_30_upper), alpha = 0.2, fill = "green") +
+  labs(title = "Actual Data vs Moving Averages with 95% Confidence Intervals",
+       x = "Date",
+       y = "Price (INR)") +
+  scale_color_manual(values = c("Actual" = "black", "7-day SMA" = "blue", "14-day SMA" = "red", "30-day SMA" = "green")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    legend.title = element_blank(),
+    legend.position = "bottom"
+  )
+
+print(p)
+```
+
+
+# Comparison of the Performance of Different Moving Average Models (7-day, 14-day, 30-day):
+
+- **7-day SMA:**
+  - MSE: 1.700805  
+  - MAE: 1.037747 
+  - RMSE: 1.304149
+
+  The 7-day SMA model demonstrates the best performance among the three models, with the lowest MSE, MAE, and RMSE. This suggests that the 7-day SMA has the least prediction error and offers the most accurate predictions within this dataset.
+
+- **14-day SMA:**
+  - MSE: 2.028512 
+  - MAE: 1.133929 
+  - RMSE: 1.424258
+
+  The 14-day SMA model shows slightly higher error metrics compared to the 7-day SMA. While still relatively accurate, the increase in error values indicates a slight reduction in predictive performance as the moving average window is extended.
+
+- **30-day SMA:**
+  - MSE: 2.642400 
+  - MAE: 1.295333
+  - RMSE: 1.625546
+
+  The 30-day SMA model has the highest error metrics among the three models. This indicates that as the moving average window increases, the model's predictive accuracy decreases. The higher MSE, MAE, and RMSE suggest that the model's predictions are less responsive to recent changes in the data.
+
+#### Strengths and Limitations of Using Moving Averages for Predictive Analytics:
+
+**Strengths:**
+1. **Simplicity and Ease of Implementation:**
+   - Moving averages are straightforward to compute and interpret, making them accessible for a wide range of applications.
+   
+2. **Noise Reduction:**
+   - By averaging out short-term fluctuations, moving averages can help in smoothing out the data, making underlying trends more visible.
+
+3. **Stability in Prediction:**
+   - Longer moving averages (e.g., 30-day SMA) provide more stable predictions, as they are less affected by short-term volatility.
+
+**Limitations:**
+1. **Lag in Prediction:**
+   - Moving averages inherently introduce a lag, as they are based on past values. This can delay the response to recent changes in the data, particularly for longer moving averages.
+
+2. **Inability to Capture Seasonality:**
+   - Simple moving averages do not account for seasonality or cyclical patterns in the data, which can lead to inaccuracies if such patterns are present.
+
+3. **Equal Weight to All Observations:**
+   - SMAs give equal weight to all observations within the window, which might not be ideal in scenarios where more recent observations should have a higher influence on predictions.
+
+#### Potential Improvements and Alternative Methods for More Accurate Predictions:
+
+1. **Exponential Moving Averages (EMA):**
+   - Unlike SMAs, EMAs assign greater weight to more recent observations, reducing the lag and making them more responsive to recent changes in the data.
+
+2. **Seasonal Decomposition:**
+   - Incorporating seasonal decomposition methods like STL (Seasonal-Trend decomposition using LOESS) can help in capturing and adjusting for seasonality and trends in the data.
+
+3. **ARIMA Models:**
+   - Autoregressive Integrated Moving Average (ARIMA) models are more sophisticated statistical methods that can handle non-stationary data and incorporate seasonality and trends for more accurate predictions.
+
+4. **Machine Learning Models:**
+   - Techniques such as Random Forest, Gradient Boosting, or even deep learning models like LSTM (Long Short-Term Memory networks) can capture complex patterns in the data and provide more accurate forecasts.
+
+5. **Hybrid Models:**
+   - Combining traditional statistical methods with machine learning techniques can leverage the strengths of both approaches, providing robust and accurate predictions.
+
+### Conclusion:
+
+The comparison of the 7-day, 14-day, and 30-day SMA models reveals that the 7-day SMA provides the most accurate predictions for this dataset, evidenced by its lower error metrics. Moving averages, while simple and effective for trend analysis and noise reduction, have inherent limitations such as lag and inability to account for seasonality. To improve predictive accuracy, more advanced methods such as EMAs, ARIMA models, and machine learning techniques should be considered. These methods can better handle complexities in the data, offering more timely and precise predictions.
+
+
+
+
+
+
+
+
