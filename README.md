@@ -1,2 +1,2 @@
 # TIme-Series
-Data science activities
+Data science activities using R
